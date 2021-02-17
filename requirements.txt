@@ -1,0 +1,4 @@
+django
+django_otp
+djangorestframework-simplejwt
+djangorestframework
