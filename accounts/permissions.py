@@ -11,6 +11,6 @@ class IsOtpVerified(permissions.BasePermission):
 
     def has_permission(self, request, view):
         if user_has_device(request.user):
-            return otp_is_verified(self, request)
+            return otp_is_verified(request)
         else:
             return True

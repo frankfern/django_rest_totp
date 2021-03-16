@@ -1,13 +1,13 @@
-from accounts.permissions import IsOtpVerified
 from rest_framework import views, permissions
-from rest_framework.response import Response
 from rest_framework import status
-# from django_otp import devices_for_user
-# from django_otp.plugins.otp_totp.models import TOTPDevice
+from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import TwoFactorTokenObtainPairSerializer
-from .utils import get_user_totp_device
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from .serializers import TotpTokenSerializer, TwoFactorTokenObtainPairSerializer
+from .permissions import IsOtpVerified
+from .utils import get_user_totp_device
+
+from django.http import HttpResponse
 
 
 class TwoFactorTokenObtainPairView(TokenObtainPairView):
@@ -19,12 +19,10 @@ class TwoFactorTokenObtainPairView(TokenObtainPairView):
         serializer = self.get_serializer(data=request.data, context={
             'device': device,
         })
-
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError as e:
             raise InvalidToken(e.args[0])
-
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
@@ -34,7 +32,7 @@ class TOTPCreateView(views.APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
-    def get(self, request, format=None):
+    def post(self, request, format=None):
         user = request.user
         device = get_user_totp_device(self, user)
         if not device:
@@ -49,7 +47,7 @@ class TOTPVerifyView(views.APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
-    def post(self, request, token, format=None):
+    def post(self, request, format=None):
         user = request.user
         device = get_user_totp_device(self, user)
         if not device:
@@ -57,27 +55,18 @@ class TOTPVerifyView(views.APIView):
                 errors=['This user has not setup two factor authentication']),
                 status=status.HTTP_400_BAD_REQUEST
             )
-        if not device == None and device.verify_token(token):
-            if not device.confirmed:
-                device.confirmed = True
-                # user.is_two_factor_enabled = True
-                device.save()
-            serializer = TwoFactorTokenObtainPairSerializer(
-                data=request.data,
-                context={
-                    'device': device,
-                }
-            )
-            serializer.is_valid(raise_exception=True)
 
-            return Response(serializer.validated_data, status=status.HTTP_200_OK)
+        serializer = TotpTokenSerializer(data=request.data, context={
+            'device': device,
+            'user': user
+        })
+        serializer.is_valid(raise_exception=True)
 
-        return Response(dict(errors=dict(token=['Invalid TOTP Token'])),
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
 class Mierda(views.APIView):
     permission_classes = [permissions.IsAuthenticated, IsOtpVerified]
 
     def get(self, request):
-        return "mierda"
+        return HttpResponse("mierda")

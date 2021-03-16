@@ -1,24 +1,32 @@
-from django.contrib.auth import get_user
 from django.contrib.auth.models import update_last_login
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainSerializer
 from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework import serializers
 from .utils import get_otp_device_id
 
 
-class TwoFactorTokenObtainPairSerializer(TokenObtainPairSerializer):
+def get_refresh_with_otp_token(user, device):
+    refresh = RefreshToken.for_user(user)
+    refresh['otp_device_id'] = get_otp_device_id(user, device)
+    return {
+        'refresh': str(refresh),
+        'access': str(refresh.access_token)
+    }
+
+
+class TwoFactorTokenObtainPairSerializer(TokenObtainSerializer):
+    @classmethod
+    def get_token(cls, user, device):
+        return get_refresh_with_otp_token(user, device)
 
     def validate(self, attrs):
         data = super().validate(attrs)
         device = self.context['device']
-        refresh = self.get_token(self.user)
-        refresh['otp_device_id'] = get_otp_device_id(self.user, device)
-
-        data['refresh'] = str(refresh)
-        data['access'] = str(refresh.access_token)
+        tokens_dict = self.get_token(self.user, device)
+        data.update(tokens_dict)
 
         if api_settings.UPDATE_LAST_LOGIN:
             update_last_login(None, self.user)
@@ -28,25 +36,20 @@ class TwoFactorTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class TotpTokenSerializer(serializers.Serializer):
 
-    def get_token(self, user):
+    otp_code = serializers.IntegerField()
 
-        token = super().get_token(user)
-        token['otp_device_id'] = get_otp_device_id(user, device)
+    def validate(self, attrs):
 
-        return token
+        user = self.context['user']
+        device = self.context['device']
+        otp_code = attrs['otp_code']
 
-    def obtain_device_jwt(cls, user):
+        if not device == None and device.verify_token(otp_code):
+            if not device.confirmed:
+                device.confirmed = True
+                # user.is_two_factor_enabled = True
+                device.save()
+            return get_refresh_with_otp_token(user, device)
 
-        # def got_user(self):
-
-        #     user = self.context['user']
-        #     return user
-
-        # def validate(self, attrs):
-        #     refresh = self.get_token(self.got_user())
-
-        #     data = {}
-        #     data['refresh'] = str(refresh)
-        #     data['access'] = str(refresh.access_token)
-
-        #     return data
+        raise serializers.ValidationError(
+            detail=dict(errors=dict(token=['Invalid TOTP Token'])))
