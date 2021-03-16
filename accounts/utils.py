@@ -1,11 +1,20 @@
 from rest_framework_simplejwt.state import token_backend
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from django_otp.models import Device
 
 from django_otp import devices_for_user
+from django_otp.models import Device
 from django_otp.plugins.otp_totp.models import TOTPDevice
-
 from django_otp.plugins.otp_static.models import StaticDevice
+
+
+def get_refresh_with_otp_token(user, device):
+    refresh = RefreshToken.for_user(user)
+    refresh['otp_device_id'] = get_otp_device_id(user, device)
+    return {
+        'refresh': str(refresh),
+        'access': str(refresh.access_token)
+    }
 
 
 def otp_is_verified(request):

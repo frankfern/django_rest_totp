@@ -5,16 +5,7 @@ from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .utils import get_otp_device_id
-
-
-def get_refresh_with_otp_token(user, device):
-    refresh = RefreshToken.for_user(user)
-    refresh['otp_device_id'] = get_otp_device_id(user, device)
-    return {
-        'refresh': str(refresh),
-        'access': str(refresh.access_token)
-    }
+from .utils import get_otp_device_id, get_refresh_with_otp_token
 
 
 class TwoFactorTokenObtainPairSerializer(TokenObtainSerializer):
@@ -47,7 +38,7 @@ class TotpTokenSerializer(serializers.Serializer):
         if not device == None and device.verify_token(otp_code):
             if not device.confirmed:
                 device.confirmed = True
-                # user.is_two_factor_enabled = True
+                user.is_two_factor_enabled = True
                 device.save()
             return get_refresh_with_otp_token(user, device)
 

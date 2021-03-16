@@ -3,11 +3,11 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from django_otp import devices_for_user
+
 from .serializers import TotpTokenSerializer, TwoFactorTokenObtainPairSerializer
 from .permissions import IsOtpVerified
-from .utils import get_user_totp_device
-
-from django.http import HttpResponse
+from .utils import get_refresh_with_otp_token, get_user_totp_device
 
 
 class TwoFactorTokenObtainPairView(TokenObtainPairView):
@@ -65,8 +65,19 @@ class TOTPVerifyView(views.APIView):
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
-class Mierda(views.APIView):
-    permission_classes = [permissions.IsAuthenticated, IsOtpVerified]
+class TOTPDeleteView(views.APIView):
+    """
+    Use this endpoint to delete a TOTP device
+    """
+    permission_classes = [permissions.IsAuthenticated,
+                          IsOtpVerified]
 
-    def get(self, request):
-        return HttpResponse("mierda")
+    def post(self, request, format=None):
+        user = request.user
+        devices = devices_for_user(user)
+        for device in devices:
+            device.delete()
+        user.is_two_factor_enabled = False
+        user.save()
+        tokens = get_refresh_with_otp_token(user, None)
+        return Response(tokens, status=status.HTTP_200_OK)
